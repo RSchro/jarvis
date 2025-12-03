@@ -72,7 +72,7 @@ class AI_Core(QObject):
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
         tools = [{'google_search': {}}, {'code_execution': {}},
-                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec]}]
+                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.get_weather_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -152,6 +152,9 @@ class AI_Core(QObject):
                                 result = jpi.edit_file(file_path=args.get("file_path"), content=args.get("content"))
                             elif fc.name == "open_application":
                                 result = jpi.open_application(application_name=args.get("application_name"))
+                            elif fc.name == "get_weather":
+                                location = args.get("location")
+                                result = jpi.get_weather(location)
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue

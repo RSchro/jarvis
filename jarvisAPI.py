@@ -1,6 +1,10 @@
 import sys
 import subprocess
 import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # -- Declares the functions for Jarvis to recognize --
 create_folder_dec = {
@@ -50,6 +54,21 @@ open_application_dec = {
                 "required": ["application_name"]
             }
         }
+
+get_weather_dec = {
+    "name": "get_weather",
+    "description": "Gets weather using a given location",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "location": {"type": "STRING", "description": "The requested location to obtain weather"},
+            "high": {"type": "STRING", "description": "The high weather"},
+            "low": {"type": "STRING", "description": "The low weather"},
+            "curr_temp": { "type": "string", "description": "The current temp"},
+        },
+        "required": ["location"]
+    }
+}
 
 
 def create_folder(folder_path):
@@ -114,3 +133,27 @@ def open_application(application_name):
         return {"status": "error", "message": f"Application '{application_name}' not found."}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def get_weather(location):
+    """Obtains current weather from given location"""
+    try:
+        lat, lon = get_lat_lon(location)
+        unit = "imperial"
+        BASE_URL = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units={unit}&appid={str(os.getenv('OPENWEATHER_API_KEY'))}"
+        response = requests.get(BASE_URL).json()
+        high = response["main"]["temp_max"]
+        low = response["main"]["temp_min"]
+        curr_temp = response["main"]["temp"]
+        print(f"High: {high}, Low: {low}, Current Temp: {curr_temp}")
+        return {"status": "success", "message": f"Successfully obtained weather from '{location}'.", "high": str(high), "low": str(low), "curr_temp": str(curr_temp)}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def get_lat_lon(location):
+    """Obtains latitude and longitude from given location"""
+    formatted_location=location.replace(" ", "%20")
+    BASE_URL = f"http://api.openweathermap.org/geo/1.0/direct?q={formatted_location}&limit=5&appid={os.getenv("OPENWEATHER_API_KEY")}"
+    response=requests.get(BASE_URL).json()
+    lat = response[0]["lat"]
+    lon = response[0]["lon"]
+    return lat, lon
