@@ -24,7 +24,7 @@ import pyaudio
 import PIL.Image
 from google import genai
 from dotenv import load_dotenv
-import jarvisAPI
+import jarvisAPI as jpi
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -71,65 +71,13 @@ class AI_Core(QObject):
         self.is_running = True
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
-        create_folder = {
-            "name": "create_folder",
-            "description": "Creates a new folder at the specified path relative to the script's root directory.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "folder_path": {
-                        "type": "STRING",
-                        "description": "The path for the new folder (e.g., 'new_project/assets')."
-                    }
-                },
-                "required": ["folder_path"]
-            }
-        }
-
-        create_file = {
-            "name": "create_file",
-            "description": "Creates a new file with specified content at a given path.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "file_path": {
-                        "type": "STRING",
-                        "description": "The path for the new file (e.g., 'new_project/notes.txt')."
-                    },
-                    "content": {
-                        "type": "STRING",
-                        "description": "The content to write into the new file."
-                    }
-                },
-                "required": ["file_path", "content"]
-            }
-        }
-
-        edit_file = {
-            "name": "edit_file",
-            "description": "Appends content to an existing file at a specified path.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "file_path": {
-                        "type": "STRING",
-                        "description": "The path of the file to edit (e.g., 'project/notes.txt')."
-                    },
-                    "content": {
-                        "type": "STRING",
-                        "description": "The content to append to the file."
-                    }
-                },
-                "required": ["file_path", "content"]
-            }
-        }
-
         tools = [{'google_search': {}}, {'code_execution': {}},
-                 {"function_declarations": [create_folder, create_file, edit_file, jarvisAPI.double_num]}]
+                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
-            "system_instruction": """Your name is Jarvis, which stands for Just A Rather Very Intelligent System. You are an Ai designed to help me with day to day task. Address me as Sir and speak in a british accent. Also keep replies precise.
+            "system_instruction": """Your name is Jarvis, which stands for Just A Rather Very Intelligent System. 
+            You are an Ai designed to help me with day to day task. Also keep replies short when plausible.
                 You have access to tools for searching, code execution, and file system actions.
                 1.  For information or questions, use `Google Search`.
                 2.  For math or running python code, use `code_execution`.
@@ -149,59 +97,6 @@ class AI_Core(QObject):
         self.latest_frame = None
         self.tasks = []
         self.loop = asyncio.new_event_loop()
-
-    def _create_folder(self, folder_path):
-        """Creates a folder at the specified path and returns a status dictionary."""
-        try:
-            if not folder_path or not isinstance(folder_path, str):
-                return {"status": "error", "message": "Invalid folder path provided."}
-
-            if os.path.exists(folder_path):
-                print(f">>> [FUNCTION CALL] Folder '{folder_path}' already exists.")
-                return {"status": "skipped", "message": f"The folder '{folder_path}' already exists."}
-
-            os.makedirs(folder_path)
-            print(f">>> [FUNCTION CALL] Successfully created folder: {folder_path}")
-            return {"status": "success", "message": f"Successfully created the folder at '{folder_path}'."}
-        except Exception as e:
-            print(f">>> [FUNCTION ERROR] Failed to create folder '{folder_path}': {e}")
-            return {"status": "error", "message": f"An error occurred: {str(e)}"}
-
-    def _create_file(self, file_path, content):
-        """Creates a file with the specified content and returns a status dictionary."""
-        try:
-            if not file_path or not isinstance(file_path, str):
-                return {"status": "error", "message": "Invalid file path provided."}
-
-            if os.path.exists(file_path):
-                print(f">>> [FUNCTION CALL] File '{file_path}' already exists.")
-                return {"status": "skipped", "message": f"The file '{file_path}' already exists."}
-
-            with open(file_path, 'w') as f:
-                f.write(content)
-            print(f">>> [FUNCTION CALL] Successfully created file: {file_path}")
-            return {"status": "success", "message": f"Successfully created the file at '{file_path}'."}
-        except Exception as e:
-            print(f">>> [FUNCTION ERROR] Failed to create file '{file_path}': {e}")
-            return {"status": "error", "message": f"An error occurred while creating the file: {str(e)}"}
-
-    def _edit_file(self, file_path, content):
-        """Appends content to an existing file and returns a status dictionary."""
-        try:
-            if not file_path or not isinstance(file_path, str):
-                return {"status": "error", "message": "Invalid file path provided."}
-
-            if not os.path.exists(file_path):
-                print(f">>> [FUNCTION ERROR] File '{file_path}' does not exist.")
-                return {"status": "error", "message": f"The file '{file_path}' does not exist. Please create it first."}
-
-            with open(file_path, 'a') as f:
-                f.write(content)
-            print(f">>> [FUNCTION CALL] Successfully appended content to file: {file_path}")
-            return {"status": "success", "message": f"Successfully appended content to the file at '{file_path}'."}
-        except Exception as e:
-            print(f">>> [FUNCTION ERROR] Failed to edit file '{file_path}': {e}")
-            return {"status": "error", "message": f"An error occurred while editing the file: {str(e)}"}
 
     async def stream_camera_to_gui(self):
         """Streams camera feed to GUI at high FPS and stores the latest frame."""
@@ -242,112 +137,46 @@ class AI_Core(QObject):
         """
         while self.is_running:
             try:
-                turn_urls = set()
-                turn_code_content = ""
-                turn_code_result = ""
-
+                turn_urls, turn_code_content, turn_code_result, file_list_data = set(), "", "", None
                 turn = self.session.receive()
                 async for chunk in turn:
-                    # --- 1. Handle Tool Calls (Function Calling) ---
                     if chunk.tool_call and chunk.tool_call.function_calls:
-                        print(">>> [DEBUG] Detected tool call from model.")
                         function_responses = []
                         for fc in chunk.tool_call.function_calls:
+                            args, result = fc.args, {}
                             if fc.name == "create_folder":
-                                print(f"\n[J.A.R.V.I.S is calling function: {fc.name}]")
-                                args = fc.args
-                                folder_path = args.get("folder_path")
-                                result = self._create_folder(folder_path=folder_path)
-
-                                function_responses.append({
-                                    "id": fc.id,
-                                    "name": fc.name,
-                                    "response": result
-                                })
-
+                                result = jpi.create_folder(folder_path=args.get("folder_path"))
                             elif fc.name == "create_file":
-                                print(f"\n[J.A.R.V.I.S is calling function: {fc.name}]")
-                                args = fc.args
-                                file_path = args.get("file_path")
-                                content = args.get("content")
-                                result = self._create_file(file_path=file_path, content=content)
-
-                                function_responses.append({
-                                    "id": fc.id,
-                                    "name": fc.name,
-                                    "response": result
-                                })
-
+                                result = jpi.create_file(file_path=args.get("file_path"), content=args.get("content"))
                             elif fc.name == "edit_file":
-                                print(f"\n[J.A.R.V.I.S is calling function: {fc.name}]")
-                                args = fc.args
-                                file_path = args.get("file_path")
-                                content = args.get("content")
-                                result = self._edit_file(file_path=file_path, content=content)
-
-                                function_responses.append({
-                                    "id": fc.id,
-                                    "name": fc.name,
-                                    "response": result
-                                })
-                            elif fc.name == "double_num":
-                                print(f"\n[J.A.R.V.I.S is calling function: {fc.name}]")
-                                args = fc.args
-                                number = args.get("number")
-                                result = jarvisAPI.double_num_func(number)
-
-                                function_responses.append({
-                                    "id": fc.id,
-                                    "name": fc.name,
-                                    "response": result
-                                })
-
-
-
-                        print(f">>> [DEBUG] Sending tool response: {function_responses}")
+                                result = jpi.edit_file(file_path=args.get("file_path"), content=args.get("content"))
+                            elif fc.name == "open_application":
+                                result = jpi.open_application(application_name=args.get("application_name"))
+                            function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue
-
-                    # --- 2. Handle Other Server Content (Search, Code Execution) ---
                     if chunk.server_content:
-                        if (hasattr(chunk.server_content, 'grounding_metadata') and
-                                chunk.server_content.grounding_metadata and
-                                chunk.server_content.grounding_metadata.grounding_chunks):
-                            for grounding_chunk in chunk.server_content.grounding_metadata.grounding_chunks:
-                                if grounding_chunk.web and grounding_chunk.web.uri:
-                                    turn_urls.add(grounding_chunk.web.uri)
-
-                        model_turn = chunk.server_content.model_turn
-                        if model_turn:
-                            for part in model_turn.parts:
-                                if part.executable_code is not None:
-                                    code = part.executable_code.code
-                                    if 'print(' in code or '\n' in code or 'import ' in code:
-                                        print(f"\n[J.A.R.V.I.S is executing code...]")
-                                        turn_code_content = code
-                                    else:
-                                        print(f"\n[J.A.R.V.I.S is searching for: {code}]")
-
-                                if part.code_execution_result is not None:
-                                    print(f"[Code execution result received]")
-                                    turn_code_result = part.code_execution_result.output
-
-                    # --- 3. Handle Regular Text Response ---
+                        if hasattr(chunk.server_content,
+                                   'grounding_metadata') and chunk.server_content.grounding_metadata:
+                            for g_chunk in chunk.server_content.grounding_metadata.grounding_chunks:
+                                if g_chunk.web and g_chunk.web.uri: turn_urls.add(g_chunk.web.uri)
+                        if chunk.server_content.model_turn:
+                            for part in chunk.server_content.model_turn.parts:
+                                if part.executable_code: turn_code_content = part.executable_code.code
+                                if part.code_execution_result: turn_code_result = part.code_execution_result.output
                     if chunk.text:
                         self.text_received.emit(chunk.text)
                         await self.response_queue_tts.put(chunk.text)
-
-                # --- End-of-turn logic to display tool activity ---
-                if turn_code_content:
+                if file_list_data:
+                    self.file_list_received.emit(file_list_data[0], file_list_data[1])
+                elif turn_code_content:
                     self.code_being_executed.emit(turn_code_content, turn_code_result)
-                    self.search_results_received.emit([])
                 elif turn_urls:
                     self.search_results_received.emit(list(turn_urls))
-                    self.code_being_executed.emit("", "")
                 else:
-                    self.search_results_received.emit([])
-                    self.code_being_executed.emit("", "")
-
+                    self.code_being_executed.emit("", "");
+                    self.search_results_received.emit([]);
+                    self.file_list_received.emit("", [])
                 self.end_of_turn.emit()
                 await self.response_queue_tts.put(None)
             except Exception:
@@ -502,7 +331,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("J.A.R.V.I.S AI Assistant")
+        self.setWindowTitle("J.A.R.V.I.S")
         self.setGeometry(100, 100, 1600, 900)
         self.setMinimumSize(1280, 720)
         self.setFont(QFont("Inter", 10))
@@ -603,7 +432,7 @@ class MainWindow(QMainWindow):
         text = self.input_box.text().strip()
         if text:
             self.text_display.append(
-                f"<p style='color:#0095FF; font-weight:bold;'>You:</p><p style='color:#EAEAEA;'>{escape(text)}</p>")
+                f"<p style='color:#0095FF; font-weight:bold;'>You: </p><p style='color:#EAEAEA;'>{escape(text)}</p>")
             self.user_text_submitted.emit(text)
             self.input_box.clear()
 
@@ -611,7 +440,7 @@ class MainWindow(QMainWindow):
     def update_text(self, text):
         if self.is_first_jarvis_chunk:
             self.is_first_jarvis_chunk = False
-            self.text_display.append(f"<p style='color:#A0A0A0; font-weight:bold;'>J.A.R.V.I.S:</p>")
+            self.text_display.append(f"<p style='color:#A0A0A0; font-weight:bold;'>J.A.R.V.I.S: </p>")
         cursor = self.text_display.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
