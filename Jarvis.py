@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QLabel,
                                QVBoxLayout, QWidget, QLineEdit, QHBoxLayout,
                                QSizePolicy)
 from PySide6.QtCore import QObject, Signal, Slot, Qt
-from PySide6.QtGui import QImage, QPixmap, QFont, QFontDatabase, QTextCursor
+from PySide6.QtGui import QImage, QPixmap, QFont, QFontDatabase, QTextCursor, QIcon
 
 # --- Media and AI Imports ---
 import cv2
@@ -72,7 +72,8 @@ class AI_Core(QObject):
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
         tools = [{'google_search': {}}, {'code_execution': {}},
-                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.get_weather_dec]}]
+                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec,
+                                            jpi.get_weather_dec, jpi.get_local_time_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -155,6 +156,8 @@ class AI_Core(QObject):
                             elif fc.name == "get_weather":
                                 location = args.get("location")
                                 result = jpi.get_weather(location)
+                            elif fc.name == "get_local_time":
+                                result = jpi.get_local_time()
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue
@@ -338,6 +341,7 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1600, 900)
         self.setMinimumSize(1280, 720)
         self.setFont(QFont("Inter", 10))
+        self.setWindowIcon(QIcon("images/ironman_helm.png"))
         self.setStyleSheet("""
             QMainWindow { background-color: #1E1F22; }
             QWidget#left_panel, QWidget#middle_panel, QWidget#right_panel { background-color: #2B2D30; border-radius: 8px; }

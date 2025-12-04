@@ -2,7 +2,9 @@ import sys
 import subprocess
 import os
 import requests
+from datetime import datetime as dt
 from dotenv import load_dotenv
+import db.database as db
 
 load_dotenv()
 
@@ -70,6 +72,18 @@ get_weather_dec = {
     }
 }
 
+get_local_time_dec = {
+    "name": "get_local_time",
+    "description": "Gets the local time",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "time": {"type": "STRING", "description": "The requested time"},
+        },
+        "required": []
+    }
+}
+
 
 def create_folder(folder_path):
     """Creates a folder at the specified path and returns a status dictionary."""
@@ -118,8 +132,14 @@ def open_application(application_name):
         if sys.platform == "win32":
             app_map = {"calculator": "calc:", "notepad": "notepad", "chrome": "chrome", "google chrome": "chrome",
                        "firefox": "firefox", "explorer": "explorer", "file explorer": "explorer"}
-            app_command = app_map.get(application_name.lower(), application_name)
-            command, shell_mode = f"start {app_command}", True
+            if application_name in app_map:
+                app_command = app_map.get(application_name.lower(), application_name)
+                command, shell_mode = f"start {app_command}", True
+            else:
+                result = db.lookup_app_path(application_name)
+                command, shell_mode = f'start "" "{result}"', True
+                print(command)
+
         elif sys.platform == "darwin":
             app_map = {"calculator": "Calculator", "chrome": "Google Chrome", "firefox": "Firefox", "finder": "Finder",
                        "textedit": "TextEdit"}
@@ -157,3 +177,14 @@ def get_lat_lon(location):
     lat = response[0]["lat"]
     lon = response[0]["lon"]
     return lat, lon
+
+def get_local_time():
+    """Gets local time"""
+    try:
+        now = dt.now()
+        curr_time = now.time()
+        formatted_time = curr_time.strftime('%I:%M %p')
+        return {"status": "success", "message": f"Successfully obtained time'.", "time": str(formatted_time)}
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
