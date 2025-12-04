@@ -26,3 +26,10 @@ def query_page(website, query):
         webbrowser.open(f"{url}{query}", new = 0)
     else:
         print("Url search path not found")
+
+# Scrolls page: value is amount of clicks, direction is False (up) or True (down)
+def scroll(down = True):
+    scroll_val = 1000
+    if down:
+        scroll_val *= -1
+    pg.scroll(scroll_val)

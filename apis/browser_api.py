@@ -1,3 +1,5 @@
+import time
+
 import apis.browser as br
 
 open_page_dec= {
@@ -26,11 +28,22 @@ search_page_dec = {
     }
 }
 
+scroll_dec = {
+    "name": "scroll_api",
+    "description": "Scroll web page on a browser",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "direction": {"type": "STRING", "description": "The direction to scroll. Example: up or down"},
+        }
+    }
+}
+
 def open_page_api(url, open_location):
     """Opens url on a browser"""
     try:
         br.open_page(url, open_location)
-        return {"status": "success", "message": f"Successfully opened {url}."}
+        return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
@@ -38,6 +51,21 @@ def search_page_api(url, query):
     """Search web page on a browser"""
     try:
         br.query_page(url, query)
-        return {"status": "success", "message": f"Successfully searched query from {url}."}
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def scroll_api(direction = "down"):
+    """Scroll web page on a browser"""
+    try:
+        # Translate to scroll up or down
+        if direction.lower() == "up":
+            scroll = False
+        else:
+            scroll = True
+
+        br.scroll(scroll)
+
+        return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}

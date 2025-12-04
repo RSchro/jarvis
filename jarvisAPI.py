@@ -179,18 +179,21 @@ def get_desktop_items():
     desktop_items = os.listdir(desk_path)
     return desktop_items
 
-def get_weather(location):
+def get_weather(location, units = "imperial"):
     """Obtains current weather from given location"""
     try:
-        lat, lon = get_lat_lon(location)
-        unit = "imperial"
-        BASE_URL = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units={unit}&appid={str(os.getenv('OPENWEATHER_API_KEY'))}"
-        response = requests.get(BASE_URL).json()
-        high = response["main"]["temp_max"]
-        low = response["main"]["temp_min"]
-        curr_temp = response["main"]["temp"]
-        print(f"High: {high}, Low: {low}, Current Temp: {curr_temp}")
-        return {"status": "success", "message": f"Successfully obtained weather from '{location}'.", "high": str(high), "low": str(low), "curr_temp": str(curr_temp)}
+        units = units
+        formatted_location = location.replace(" ","%20").lower()
+        formatted_location = formatted_location.replace(",", "%20")
+        forecast_url = f"https://api.tomorrow.io/v4/weather/forecast?location={formatted_location}&timesteps=1d&units={units}&apikey={os.getenv('TOMORROWIO_API_KEY')}"
+        realtime_url = f"https://api.tomorrow.io/v4/weather/realtime?location={formatted_location}&units={units}&apikey={os.getenv('TOMORROWIO_API_KEY')}"
+        forecast = requests.get(forecast_url).json()
+        realtime = requests.get(realtime_url).json()
+        high = forecast["timelines"]["daily"][0]["values"]["temperatureMax"]
+        low = forecast["timelines"]["daily"][0]["values"]["temperatureMin"]
+        current = realtime["data"]["values"]["temperature"]
+        return {"status": "success", "message": f"Successfully obtained weather from '{location}'.", "high": str(high),
+            "low": str(low), "curr_temp": str(current)}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
