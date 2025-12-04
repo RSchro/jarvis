@@ -37,11 +37,15 @@ def lookup_app_path(app_name):
     cxn = connect(DB_PATH, check_same_thread=False)
     cur = cxn.cursor()
 
-    cur.execute("SELECT app_path FROM application_paths WHERE app_name = ?", (app_name.lower(),))
+    try:
+        cur.execute("SELECT app_path FROM application_paths WHERE app_name = ?", (app_name.lower(),))
 
-    result = cur.fetchone()[0]
-    cxn.close()
-    return result
+        result = cur.fetchone()[0]
+        cxn.close()
+        return result
+    except:
+        cxn.close()
+        return None
 
 def change_app_path(app_name, app_path):
     """Change path to an application by name"""
@@ -49,5 +53,14 @@ def change_app_path(app_name, app_path):
     cur = cxn.cursor()
 
     cur.execute("UPDATE application_paths SET app_path = ? WHERE app_name = ?", (app_path, app_name.lower()))
+    cxn.commit()
+    cxn.close()
+
+def delete_app_path(app_name):
+    """Deletes an app and its path"""
+    cxn = connect(DB_PATH, check_same_thread=False)
+    cur = cxn.cursor()
+
+    cur.execute("DELETE FROM application_paths WHERE app_name = ?", (app_name.lower(),))
     cxn.commit()
     cxn.close()

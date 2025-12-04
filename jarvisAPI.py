@@ -2,6 +2,7 @@ import sys
 import subprocess
 import os
 import requests
+import fnmatch
 from datetime import datetime as dt
 from dotenv import load_dotenv
 import db.database as db
@@ -136,8 +137,19 @@ def open_application(application_name):
                 app_command = app_map.get(application_name.lower(), application_name)
                 command, shell_mode = f"start {app_command}", True
             else:
+                print("Not in app_map")
                 result = db.lookup_app_path(application_name)
-                command, shell_mode = f'start "" "{result}"', True
+                if result is not None:
+                    print("Looking up application path")
+                    command, shell_mode = f'start "" "{result}"', True
+                else:
+                    desktop_items = get_desktop_items()
+                    filtered_items = fnmatch.filter(desktop_items, f"{application_name}*")
+                    desk_path = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+                    if application_name.lower() in filtered_items[0].lower():
+                        print("Found desktop shortcut")
+                        command, shell_mode = f'start {desk_path}\\{filtered_items[0]}', True
+
 
         elif sys.platform == "darwin":
             app_map = {"calculator": "Calculator", "chrome": "Google Chrome", "firefox": "Firefox", "finder": "Finder",
@@ -152,6 +164,20 @@ def open_application(application_name):
         return {"status": "error", "message": f"Application '{application_name}' not found."}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def get_desktop_items():
+    desk_path = ""
+    if os.name == 'nt':  # Windows
+        desk_path = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+    elif os.name == 'posix':  # macOS or Linux
+        desk_path = os.path.expanduser('~/Desktop')
+        try:
+            desk_path = subprocess.check_output(['xdg-user-dir', 'DESKTOP']).decode().strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
+
+    desktop_items = os.listdir(desk_path)
+    return desktop_items
 
 def get_weather(location):
     """Obtains current weather from given location"""
