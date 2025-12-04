@@ -64,3 +64,49 @@ def delete_app_path(app_name):
     cur.execute("DELETE FROM application_paths WHERE app_name = ?", (app_name.lower(),))
     cxn.commit()
     cxn.close()
+
+# Formats website names for database
+def format_website_name(website):
+    formatted_name = website.partition(".")[0]
+    formatted_name = formatted_name.replace(" ", "").lower()
+    return formatted_name
+
+# Inserts new website and its query url
+def insert_url_search(url_name, url_search):
+    """Insert url search string into table"""
+    cxn = connect(DB_PATH, check_same_thread=False)
+    cur = cxn.cursor()
+
+    formatted = format_website_name(url_name)
+
+    cur.execute("INSERT INTO web_search_urls VALUES (?, ?)", (formatted, url_search))
+
+    cxn.commit()
+    cxn.close()
+
+# Lookup search url by website
+def lookup_url_search(url_name):
+    """Lookup url search string by name"""
+    cxn = connect(DB_PATH, check_same_thread=False)
+    cur = cxn.cursor()
+
+    formatted = format_website_name(url_name)
+
+    cur.execute("SELECT url_search FROM web_search_urls WHERE url_name = ?", (formatted,))
+
+    result = cur.fetchone()[0]
+
+    cxn.close()
+    return result
+
+# Remove website search url
+def remove_url_search(url_name):
+    """Remove url search string from table"""
+    cxn = connect(DB_PATH, check_same_thread=False)
+    cur = cxn.cursor()
+
+    formatted = format_website_name(url_name)
+    cur.execute("DELETE FROM web_search_urls WHERE url_name = ?", (formatted,))
+
+    cxn.commit()
+    cxn.close()

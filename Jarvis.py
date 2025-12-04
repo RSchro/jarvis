@@ -26,6 +26,7 @@ from google import genai
 from dotenv import load_dotenv
 import jarvisAPI as jpi
 import db.dp_api as dbapi
+import apis.browser_api as br
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -74,7 +75,7 @@ class AI_Core(QObject):
 
         tools = [{'google_search': {}}, {'code_execution': {}},
                  {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec,
-                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec]}]
+                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, br.open_page_dec, br.search_page_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -144,6 +145,8 @@ class AI_Core(QObject):
                 async for chunk in turn:
                     if chunk.tool_call and chunk.tool_call.function_calls:
                         function_responses = []
+
+                        """ HANDLES RESULTS FROM TOOLS """
                         for fc in chunk.tool_call.function_calls:
                             args, result = fc.args, {}
                             if fc.name == "create_folder":
@@ -163,6 +166,15 @@ class AI_Core(QObject):
                                 app_name = args.get("app_name")
                                 app_path = args.get("app_path")
                                 result = dbapi.insert_app(app_name, app_path)
+                            elif fc.name == "open_page_api":
+                                url_name = args.get("url")
+                                open_location = args.get("open_location")
+                                result = br.open_page_api(url_name, open_location)
+                            elif fc.name == "search_page_api":
+                                website = args.get("website")
+                                query = args.get("query")
+                                result = br.search_page_api(website, query)
+
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue
