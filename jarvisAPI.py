@@ -138,7 +138,6 @@ def open_application(application_name):
             else:
                 result = db.lookup_app_path(application_name)
                 command, shell_mode = f'start "" "{result}"', True
-                print(command)
 
         elif sys.platform == "darwin":
             app_map = {"calculator": "Calculator", "chrome": "Google Chrome", "firefox": "Firefox", "finder": "Finder",

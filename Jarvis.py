@@ -25,6 +25,7 @@ import PIL.Image
 from google import genai
 from dotenv import load_dotenv
 import jarvisAPI as jpi
+import db.dp_api as dbapi
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -73,7 +74,7 @@ class AI_Core(QObject):
 
         tools = [{'google_search': {}}, {'code_execution': {}},
                  {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec,
-                                            jpi.get_weather_dec, jpi.get_local_time_dec]}]
+                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -158,6 +159,10 @@ class AI_Core(QObject):
                                 result = jpi.get_weather(location)
                             elif fc.name == "get_local_time":
                                 result = jpi.get_local_time()
+                            elif fc.name == "insert_app_path":
+                                app_name = args.get("app_name")
+                                app_path = args.get("app_path")
+                                result = dbapi.insert_app(app_name, app_path)
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue
