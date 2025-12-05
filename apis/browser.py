@@ -1,4 +1,5 @@
 import webbrowser
+import pygetwindow as gw
 import pyautogui as pg
 import time
 import os
@@ -33,3 +34,14 @@ def scroll(down = True):
     if down:
         scroll_val *= -1
     pg.scroll(scroll_val)
+
+def swap_to_application(application):
+    search = gw.getAllTitles()
+    for item in search:
+        if application.lower() in item.lower():
+            application = str(item)
+
+    app = gw.getWindowsWithTitle(application)[0]
+    app.minimize()
+    app.restore()
+    app.activate()

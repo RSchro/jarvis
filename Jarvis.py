@@ -23,10 +23,13 @@ import cv2
 import pyaudio
 import PIL.Image
 from google import genai
+from google.genai.types import UserContent, ModelContent, Part
 from dotenv import load_dotenv
+
 import jarvisAPI as jpi
 import db.dp_api as dbapi
 import apis.browser_api as br
+import apis.spotify_api as spt
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -48,6 +51,16 @@ MODEL = "gemini-live-2.5-flash-preview"
 VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
 DEFAULT_MODE = "camera"
 MAX_OUTPUT_TOKENS = 100
+INITIAL_HISTORY = [
+    UserContent(parts=[Part(text="Start the conversation.")]),
+    ModelContent(
+        parts=[
+            Part(
+                text="Hello, Sir. How can I help you today?",
+            )
+        ]
+    ),
+]
 
 # --- Initialize Clients ---
 pya = pyaudio.PyAudio()
@@ -75,7 +88,8 @@ class AI_Core(QObject):
 
         tools = [{'google_search': {}}, {'code_execution': {}},
                  {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec,
-                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, br.open_page_dec, br.search_page_dec]}]
+                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, br.open_page_dec, br.search_page_dec,
+                                            br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -89,7 +103,7 @@ class AI_Core(QObject):
                 5.  If the user asks to add to, append, or edit an existing file, you must use the `edit_file` function.
                 Prioritize the most appropriate tool for the user's specific request.""",
             "tools": tools,
-            "max_output_tokens": MAX_OUTPUT_TOKENS
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
         }
         self.session = None
         self.audio_stream = None
@@ -100,6 +114,12 @@ class AI_Core(QObject):
         self.latest_frame = None
         self.tasks = []
         self.loop = asyncio.new_event_loop()
+
+    def send_initial_welcome(self):
+        """Sends an initial message to the user"""
+        welcome_message = INITIAL_HISTORY[-1].parts[0].text
+        self.text_received.emit(welcome_message)
+        self.end_of_turn.emit()
 
     async def stream_camera_to_gui(self):
         """Streams camera feed to GUI at high FPS and stores the latest frame."""
@@ -174,6 +194,18 @@ class AI_Core(QObject):
                                 website = args.get("website")
                                 query = args.get("query")
                                 result = br.search_page_api(website, query)
+                            elif fc.name == "scroll_api":
+                                direction = args.get("direction")
+                                result = br.scroll_api(direction)
+                            elif fc.name == "play_pause":
+                                result = spt.play_pause()
+                            elif fc.name == "skip_track":
+                                result = spt.skip_track()
+                            elif fc.name == "previous_track":
+                                result = spt.previous_track()
+                            elif fc.name == "spotify_play_song":
+                                query = args.get("query")
+                                result = spt.spotify_play_song(query)
 
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
@@ -291,6 +323,9 @@ class AI_Core(QObject):
     async def main_task_runner(self, session):
         self.session = session
         print(">>> [INFO] Starting all backend tasks...")
+
+        await asyncio.to_thread(self.send_initial_welcome)
+
         if self.video_mode == "camera":
             self.tasks.append(asyncio.create_task(self.stream_camera_to_gui()))
             self.tasks.append(asyncio.create_task(self.send_frames_to_gemini()))
@@ -456,7 +491,7 @@ class MainWindow(QMainWindow):
         text = self.input_box.text().strip()
         if text:
             self.text_display.append(
-                f"<p style='color:#0095FF; font-weight:bold;'>You: </p><p style='color:#EAEAEA;'>{escape(text)}</p>")
+                f"<p style='color:#0095FF; font-weight:bold;'>You>  </p><p style='color:#EAEAEA;'>{escape(text)}</p>")
             self.user_text_submitted.emit(text)
             self.input_box.clear()
 
@@ -464,7 +499,7 @@ class MainWindow(QMainWindow):
     def update_text(self, text):
         if self.is_first_jarvis_chunk:
             self.is_first_jarvis_chunk = False
-            self.text_display.append(f"<p style='color:#A0A0A0; font-weight:bold;'>J.A.R.V.I.S: </p>")
+            self.text_display.append(f"<p style='color:#A0A0A0; font-weight:bold;'>J.A.R.V.I.S>  </p>")
         cursor = self.text_display.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
