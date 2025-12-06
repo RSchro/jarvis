@@ -23,3 +23,12 @@ def spotify_play_song(query):
     pg.write(query)
     time.sleep(1)
     pg.press("enter")
+
+# Searches and plays an artis on Spotify
+def spotify_play_artist(artist):
+    time.sleep(0.5)
+    pg.hotkey("ctrl", "k")
+    time.sleep(0.5)
+    pg.write(artist)
+    time.sleep(1)
+    pg.hotkey("shift", "enter")

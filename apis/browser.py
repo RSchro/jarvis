@@ -1,13 +1,10 @@
 import webbrowser
 import pygetwindow as gw
 import pyautogui as pg
-import time
-import os
 import db.database as db
 
-# Opens webpage on default browser
 def open_page(url: str, open_location: str = "tab"):
-    """Open a web browser and navigates to specified url"""
+    """Opens url on a browser"""
     same_window = ["same", "same window", "this window"]
 
     # Open window in new window, same window or new tab
@@ -21,6 +18,7 @@ def open_page(url: str, open_location: str = "tab"):
     webbrowser.open(f"https://{url}", new=new)
 
 def query_page(website, query):
+    """Search web page on a browser"""
     url = db.lookup_url_search(website)
 
     if url:
@@ -30,10 +28,12 @@ def query_page(website, query):
 
 # Scrolls page: value is amount of clicks, direction is False (up) or True (down)
 def scroll(down = True):
+    """Scroll web page on a browser"""
     scroll_val = 1000
     if down:
         scroll_val *= -1
     pg.scroll(scroll_val)
+
 
 def swap_to_application(application):
     search = gw.getAllTitles()

@@ -1,6 +1,8 @@
 import sys
 import subprocess
 import os
+import time
+
 import requests
 import fnmatch
 from datetime import datetime as dt
@@ -85,6 +87,30 @@ get_local_time_dec = {
     }
 }
 
+wait_dec = {
+    "name": "wait",
+    "description": "Waits for amount of seconds given",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "seconds": { "type": "INTEGER", "description": "The amount of seconds to wait. Example: 1 or 0.5 for half a second"},
+        },
+        "required": ["seconds"]
+    }
+}
+
+close_app_dec = {
+    "name": "close_application",
+    "description": "Closes an application by name",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "application_name": { "type": "STRING", "description": "The name of the application to close."},
+        },
+        "required": ["application_name"]
+    }
+}
+
 
 def create_folder(folder_path):
     """Creates a folder at the specified path and returns a status dictionary."""
@@ -133,7 +159,7 @@ def open_application(application_name):
         if sys.platform == "win32":
             app_map = {"calculator": "calc:", "notepad": "notepad", "chrome": "chrome", "google chrome": "chrome",
                        "firefox": "firefox", "explorer": "explorer", "file explorer": "explorer"}
-            if application_name in app_map:
+            if application_name.lower() in app_map:
                 app_command = app_map.get(application_name.lower(), application_name)
                 command, shell_mode = f"start {app_command}", True
             else:
@@ -215,4 +241,16 @@ def get_local_time():
         return {"status": "success", "message": f"Successfully obtained time'.", "time": str(formatted_time)}
     except Exception as e:
         print(f"An error occurred: {str(e)}")
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def wait(seconds = 1):
+    time.sleep(seconds)
+
+def close_application(application_name):
+    """Closes an application"""
+    try:
+        command = f"taskkill /IM {application_name.lower()}.exe"
+        subprocess.Popen(command, shell=True)
+        return {"status": "success", "message": f"Successfully closed application '{application_name}'."}
+    except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}

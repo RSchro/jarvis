@@ -1,6 +1,7 @@
 import time
 import apis.spotify as spot
 import apis.browser as br
+from apis import spotify
 
 spotify_tools = ["play_pause_dec", "skip_dec", "previous_track_dec", "spotify_play_song_dec"]
 
@@ -25,7 +26,18 @@ spotify_play_song_dec = {
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "query": {"type": "STRING", "description": "The song name the user requests."},
+            "song": {"type": "STRING", "description": "The song name the user requests."},
+        }
+    }
+}
+
+spotify_play_artist_dec = {
+    "name": "spotify_play_artist",
+    "description": "Plays an artist via Spotify application",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "artist": {"type": "STRING", "description": "The artist name the user requests."},
         }
     }
 }
@@ -54,12 +66,26 @@ def previous_track():
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
-def spotify_play_song(query):
+def spotify_play_song(song):
     """Play a song on spotify application"""
     try:
-        time.sleep(2)
+        spot.play_pause()
+        time.sleep(0.2)
         br.swap_to_application("spotify")
-        spot.spotify_play_song(query)
+        time.sleep(0.2)
+        spot.spotify_play_song(song)
         return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+def spotify_play_artist(artist):
+    """Plays an artist on spotify application"""
+    try:
+        spot.play_pause()
+        time.sleep(0.2)
+        br.swap_to_application("spotify")
+        time.sleep(0.2)
+        spot.spotify_play_artist(artist)
+        return {"status": "success", "message": f"Now playing: {artist} on Spotify"}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}

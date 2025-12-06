@@ -49,18 +49,9 @@ RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE = 1024
 MODEL = "gemini-live-2.5-flash-preview"
 VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
-DEFAULT_MODE = "camera"
 MAX_OUTPUT_TOKENS = 100
-INITIAL_HISTORY = [
-    UserContent(parts=[Part(text="Start the conversation.")]),
-    ModelContent(
-        parts=[
-            Part(
-                text="Hello, Sir. How can I help you today?",
-            )
-        ]
-    ),
-]
+
+HISTORY_FILE = "db/chat_history.json"
 
 # --- Initialize Clients ---
 pya = pyaudio.PyAudio()
@@ -80,16 +71,16 @@ class AI_Core(QObject):
     search_results_received = Signal(list)
     code_being_executed = Signal(str, str)
 
-    def __init__(self, video_mode=DEFAULT_MODE):
+    def __init__(self):
         super().__init__()
-        self.video_mode = video_mode
         self.is_running = True
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
         tools = [{'google_search': {}}, {'code_execution': {}},
-                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec,
-                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, br.open_page_dec, br.search_page_dec,
-                                            br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec]}]
+                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.close_app_dec,
+                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
+                                            br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
+                                            dbapi.get_user_preferences_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -115,30 +106,6 @@ class AI_Core(QObject):
         self.tasks = []
         self.loop = asyncio.new_event_loop()
 
-    def send_initial_welcome(self):
-        """Sends an initial message to the user"""
-        welcome_message = INITIAL_HISTORY[-1].parts[0].text
-        self.text_received.emit(welcome_message)
-        self.end_of_turn.emit()
-
-    async def stream_camera_to_gui(self):
-        """Streams camera feed to GUI at high FPS and stores the latest frame."""
-        cap = await asyncio.to_thread(cv2.VideoCapture, 0)
-        while self.is_running:
-            ret, frame = await asyncio.to_thread(cap.read)
-            if not ret:
-                await asyncio.sleep(0.01)
-                continue
-
-            self.latest_frame = frame
-            h, w, ch = frame.shape
-            bytes_per_line = ch * w
-            qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format_BGR888)
-            self.frame_received.emit(qt_image.copy())
-
-            await asyncio.sleep(0.033)  # Aim for ~30 FPS
-        cap.release()
-        print(">>> [INFO] Camera stream stopped.")
 
     async def send_frames_to_gemini(self):
         """Periodically sends the latest frame to Gemini at 1 FPS."""
@@ -177,6 +144,8 @@ class AI_Core(QObject):
                                 result = jpi.edit_file(file_path=args.get("file_path"), content=args.get("content"))
                             elif fc.name == "open_application":
                                 result = jpi.open_application(application_name=args.get("application_name"))
+                            elif fc.name == "close_application":
+                                result = jpi.close_application(application_name=args.get("application_name"))
                             elif fc.name == "get_weather":
                                 location = args.get("location")
                                 result = jpi.get_weather(location)
@@ -186,6 +155,10 @@ class AI_Core(QObject):
                                 app_name = args.get("app_name")
                                 app_path = args.get("app_path")
                                 result = dbapi.insert_app(app_name, app_path)
+                            elif fc.name == "insert_web_search_url":
+                                website = args.get("website")
+                                search_url = args.get("search_url")
+                                result = dbapi.insert_web_search_url(website, search_url)
                             elif fc.name == "open_page_api":
                                 url_name = args.get("url")
                                 open_location = args.get("open_location")
@@ -204,8 +177,11 @@ class AI_Core(QObject):
                             elif fc.name == "previous_track":
                                 result = spt.previous_track()
                             elif fc.name == "spotify_play_song":
-                                query = args.get("query")
-                                result = spt.spotify_play_song(query)
+                                song = args.get("song")
+                                result = spt.spotify_play_song(song)
+                            elif fc.name == "spotify_play_artist":
+                                artist = args.get("artist")
+                                result = spt.spotify_play_artist(artist)
 
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
@@ -256,6 +232,10 @@ class AI_Core(QObject):
             self.out_queue_gemini.task_done()
 
     async def process_text_input_queue(self):
+        await self.session.send_client_content(
+            turns={"role": "user", "parts": [{"text": "Occasionally call me Mr. Schroeder or sir, upon your preference. Now greet me as you wish."}]}
+        )
+
         while self.is_running:
             text = await self.text_input_queue.get()
             if text is None:
@@ -288,6 +268,7 @@ class AI_Core(QObject):
                             try:
                                 message = await websocket.recv()
                                 data = json.loads(message)
+                                print(message)
                                 if data.get("audio"):
                                     await self.audio_in_queue_player.put(base64.b64decode(data["audio"]))
                                 elif data.get("isFinal"):
@@ -324,11 +305,6 @@ class AI_Core(QObject):
         self.session = session
         print(">>> [INFO] Starting all backend tasks...")
 
-        await asyncio.to_thread(self.send_initial_welcome)
-
-        if self.video_mode == "camera":
-            self.tasks.append(asyncio.create_task(self.stream_camera_to_gui()))
-            self.tasks.append(asyncio.create_task(self.send_frames_to_gemini()))
         self.tasks.append(asyncio.create_task(self.listen_audio()))
         self.tasks.append(asyncio.create_task(self.send_realtime()))
         self.tasks.append(asyncio.create_task(self.receive_text()))
@@ -471,11 +447,11 @@ class MainWindow(QMainWindow):
 
     def setup_backend_thread(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("--mode", type=str, default=DEFAULT_MODE, help="pixels to stream from",
-                            choices=["camera", "screen", "none"])
+        parser.add_argument("--mode", type=str, help="pixels to stream from",
+                            choices=["screen", "none"])
         args, unknown = parser.parse_known_args()
 
-        self.ai_core = AI_Core(video_mode=args.mode)
+        self.ai_core = AI_Core()
         self.user_text_submitted.connect(self.ai_core.handle_user_text)
         self.ai_core.text_received.connect(self.update_text)
         self.ai_core.search_results_received.connect(self.update_search_results)
