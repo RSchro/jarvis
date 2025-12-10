@@ -8,6 +8,7 @@ import fnmatch
 from datetime import datetime as dt
 from dotenv import load_dotenv
 import db.database as db
+import apis.spotify_api as spot
 
 load_dotenv()
 
@@ -111,6 +112,24 @@ close_app_dec = {
     }
 }
 
+welcome_home_dec = {
+    "name": "welcome_home",
+    "description": "Welcomes the user back home",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+        }
+    }
+}
+
+
+def welcome_home():
+    """Welcomes the user back home"""
+    try:
+        spot.spotify_play_song("Back in Black")
+        return {"status": "success", "message": f"User has been welcomed home."}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
 def create_folder(folder_path):
     """Creates a folder at the specified path and returns a status dictionary."""
@@ -206,7 +225,7 @@ def get_desktop_items():
     return desktop_items
 
 def get_weather(location, units = "imperial"):
-    """Obtains current weather from given location"""
+    """Retrieves current weather from given location"""
     try:
         units = units
         formatted_location = location.replace(" ","%20").lower()

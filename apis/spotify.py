@@ -16,8 +16,7 @@ def previous():
     pg.press("prevtrack")
 
 # Searches Spotify
-def spotify_play_song(query):
-    time.sleep(0.5)
+def play_song(query):
     pg.hotkey("ctrl", "k")
     time.sleep(0.2)
     pg.write(query)
@@ -25,7 +24,7 @@ def spotify_play_song(query):
     pg.press("enter")
 
 # Searches and plays an artis on Spotify
-def spotify_play_artist(artist):
+def play_artist(artist):
     time.sleep(0.5)
     pg.hotkey("ctrl", "k")
     time.sleep(0.5)

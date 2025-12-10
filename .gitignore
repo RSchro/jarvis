@@ -1,3 +1,4 @@
 .env
 db/jarvis.db
 db/images
+run.py

@@ -37,11 +37,15 @@ def scroll(down = True):
 
 def swap_to_application(application):
     search = gw.getAllTitles()
+    found = False
     for item in search:
         if application.lower() in item.lower():
             application = str(item)
+            found = True
 
-    app = gw.getWindowsWithTitle(application)[0]
-    app.minimize()
-    app.restore()
-    app.activate()
+    if found:
+        app = gw.getWindowsWithTitle(application)[0]
+        app.restore()
+        app.activate()
+    print(found)
+    return found

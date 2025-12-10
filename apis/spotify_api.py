@@ -1,7 +1,7 @@
 import time
 import apis.spotify as spot
 import apis.browser as br
-from apis import spotify
+import jarvisAPI as jpi
 
 spotify_tools = ["play_pause_dec", "skip_dec", "previous_track_dec", "spotify_play_song_dec"]
 
@@ -69,12 +69,12 @@ def previous_track():
 def spotify_play_song(song):
     """Play a song on spotify application"""
     try:
-        spot.play_pause()
-        time.sleep(0.2)
+        jpi.open_application("spotify")
+        time.sleep(3)
         br.swap_to_application("spotify")
         time.sleep(0.2)
-        spot.spotify_play_song(song)
-        return {"status": "success"}
+        spot.play_song(song)
+        return {"status": "success", "message": f"Playing {song}"}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
@@ -85,7 +85,7 @@ def spotify_play_artist(artist):
         time.sleep(0.2)
         br.swap_to_application("spotify")
         time.sleep(0.2)
-        spot.spotify_play_artist(artist)
+        spot.play_artist(artist)
         return {"status": "success", "message": f"Now playing: {artist} on Spotify"}
     except Exception as e:
         return {"status": "error", "message": f"An error occurred: {str(e)}"}

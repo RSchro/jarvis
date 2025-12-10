@@ -10,6 +10,7 @@ import websockets
 import argparse
 import threading
 from html import escape
+import logging
 
 # --- PySide6 GUI Imports ---
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QLabel,
@@ -25,11 +26,14 @@ import PIL.Image
 from google import genai
 from google.genai.types import UserContent, ModelContent, Part
 from dotenv import load_dotenv
+import subprocess
 
 import jarvisAPI as jpi
 import db.dp_api as dbapi
 import apis.browser_api as br
 import apis.spotify_api as spt
+import apis.emails_api as e
+from apis.ansicolors import ANSIColors as ansi
 
 # --- Load Environment Variables ---
 load_dotenv()
@@ -47,8 +51,9 @@ CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE = 1024
-MODEL = "gemini-live-2.5-flash-preview"
-VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
+MODEL = "models/gemini-live-2.5-flash-preview"
+VOICE_ID = 'iF0kaX7XTQPFLTjMlJL4'
+USE_VOICE = True
 MAX_OUTPUT_TOKENS = 100
 
 HISTORY_FILE = "db/chat_history.json"
@@ -56,6 +61,16 @@ HISTORY_FILE = "db/chat_history.json"
 # --- Initialize Clients ---
 pya = pyaudio.PyAudio()
 
+# Suppresses 'non_text' warning message from Google Genai with 'executable_code'
+class _NoFunctionCallWarning(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if "there are non-text parts in the response:" in message:
+            return False
+        else:
+            return True
+
+logging.getLogger("google_genai.types").addFilter(_NoFunctionCallWarning())
 
 # ==============================================================================
 # AI BACKEND LOGIC
@@ -77,10 +92,10 @@ class AI_Core(QObject):
         self.client = genai.Client(api_key=GEMINI_API_KEY)
 
         tools = [{'google_search': {}}, {'code_execution': {}},
-                 {"function_declarations": [jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.close_app_dec,
+                 {"function_declarations": [jpi.welcome_home_dec, jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.close_app_dec,
                                             jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
                                             br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
-                                            dbapi.get_user_preferences_dec]}]
+                                            dbapi.get_user_preferences_dec, e.count_emails_dec, e.print_emails_dec, e.delete_emails_dec]}]
 
         self.config = {
             "response_modalities": ["TEXT"],
@@ -99,7 +114,8 @@ class AI_Core(QObject):
         self.session = None
         self.audio_stream = None
         self.out_queue_gemini = asyncio.Queue(maxsize=20)
-        self.response_queue_tts = asyncio.Queue()
+        if USE_VOICE:
+            self.response_queue_tts = asyncio.Queue()
         self.audio_in_queue_player = asyncio.Queue()
         self.text_input_queue = asyncio.Queue()
         self.latest_frame = None
@@ -136,7 +152,9 @@ class AI_Core(QObject):
                         """ HANDLES RESULTS FROM TOOLS """
                         for fc in chunk.tool_call.function_calls:
                             args, result = fc.args, {}
-                            if fc.name == "create_folder":
+                            if fc.name == "welcome_home":
+                                result = jpi.welcome_home()
+                            elif fc.name == "create_folder":
                                 result = jpi.create_folder(folder_path=args.get("folder_path"))
                             elif fc.name == "create_file":
                                 result = jpi.create_file(file_path=args.get("file_path"), content=args.get("content"))
@@ -182,6 +200,15 @@ class AI_Core(QObject):
                             elif fc.name == "spotify_play_artist":
                                 artist = args.get("artist")
                                 result = spt.spotify_play_artist(artist)
+                            elif fc.name == "count_emails":
+                                result = e.count_emails()
+                            elif fc.name == "print_emails":
+                                limit = args.get("limit")
+                                result = e.print_emails(limit)
+                            elif fc.name == "delete_mail":
+                                subject = args.get("subject")
+                                sender = args.get("sender")
+                                result = e.delete_mail(subject, sender)
 
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
@@ -197,28 +224,32 @@ class AI_Core(QObject):
                                 if part.code_execution_result: turn_code_result = part.code_execution_result.output
                     if chunk.text:
                         self.text_received.emit(chunk.text)
-                        await self.response_queue_tts.put(chunk.text)
+                        if USE_VOICE:
+                            await self.response_queue_tts.put(chunk.text)
                 if file_list_data:
-                    self.file_list_received.emit(file_list_data[0], file_list_data[1])
+                        # self.file_list_received.emit(file_list_data[0], file_list_data[1])
+                    continue
                 elif turn_code_content:
                     self.code_being_executed.emit(turn_code_content, turn_code_result)
                 elif turn_urls:
                     self.search_results_received.emit(list(turn_urls))
                 else:
-                    self.code_being_executed.emit("", "");
-                    self.search_results_received.emit([]);
-                    self.file_list_received.emit("", [])
+                    self.code_being_executed.emit("", "")
+                    self.search_results_received.emit([])
+                    # self.file_list_received.emit("", [])
                 self.end_of_turn.emit()
-                await self.response_queue_tts.put(None)
+                if USE_VOICE:
+                    await self.response_queue_tts.put(None)
             except Exception:
                 if not self.is_running: break
                 traceback.print_exc()
+            print()
 
     async def listen_audio(self):
         mic_info = pya.get_default_input_device_info()
         self.audio_stream = pya.open(format=FORMAT, channels=CHANNELS, rate=SEND_SAMPLE_RATE, input=True,
                                      input_device_index=mic_info["index"], frames_per_buffer=CHUNK_SIZE)
-        print(">>> [INFO] Microphone is listening...")
+        print(f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Microphone is listening...\n")
         while self.is_running:
             data = await asyncio.to_thread(self.audio_stream.read, CHUNK_SIZE, exception_on_overflow=False)
             if not self.is_running: break
@@ -233,7 +264,8 @@ class AI_Core(QObject):
 
     async def process_text_input_queue(self):
         await self.session.send_client_content(
-            turns={"role": "user", "parts": [{"text": "Occasionally call me Mr. Schroeder or sir, upon your preference. Now greet me as you wish."}]}
+            turns={"role": "user", "parts": [{"text": "Occasionally call me Mr. Schroeder or sir, upon your preference. Only welcome me home if I tell you I've returned. "
+                                                      "Reply with 'Of course, sir."}]}
         )
 
         while self.is_running:
@@ -242,9 +274,10 @@ class AI_Core(QObject):
                 self.text_input_queue.task_done()
                 break
             if self.session:
-                print(f">>> [INFO] Sending text to AI: '{text}'")
-                for q in [self.response_queue_tts, self.audio_in_queue_player]:
-                    while not q.empty(): q.get_nowait()
+                print( f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Sending text to AI: '{text}'")
+                if USE_VOICE:
+                    for q in [self.response_queue_tts, self.audio_in_queue_player]:
+                        while not q.empty(): q.get_nowait()
                 await self.session.send_client_content(
                     turns=[{"role": "user", "parts": [{"text": text or "."}]}]
                 )
@@ -268,7 +301,6 @@ class AI_Core(QObject):
                             try:
                                 message = await websocket.recv()
                                 data = json.loads(message)
-                                print(message)
                                 if data.get("audio"):
                                     await self.audio_in_queue_player.put(base64.b64decode(data["audio"]))
                                 elif data.get("isFinal"):
@@ -289,12 +321,11 @@ class AI_Core(QObject):
                         self.response_queue_tts.task_done()
                     await listen_task
             except Exception as e:
-                print(f">>> [ERROR] TTS Error: {e}")
+                print(f">>> [{ansi.RED}ERROR{ansi.ENDC}] TTS Error: {e}")
 
     async def play_audio(self):
         stream = await asyncio.to_thread(pya.open, format=pyaudio.paInt16, channels=CHANNELS, rate=RECEIVE_SAMPLE_RATE,
                                          output=True)
-        print(">>> [INFO] Audio output stream is open.")
         while self.is_running:
             bytestream = await self.audio_in_queue_player.get()
             if bytestream and self.is_running:
@@ -303,24 +334,25 @@ class AI_Core(QObject):
 
     async def main_task_runner(self, session):
         self.session = session
-        print(">>> [INFO] Starting all backend tasks...")
+        print(f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Starting all backend tasks...")
 
         self.tasks.append(asyncio.create_task(self.listen_audio()))
         self.tasks.append(asyncio.create_task(self.send_realtime()))
         self.tasks.append(asyncio.create_task(self.receive_text()))
-        self.tasks.append(asyncio.create_task(self.tts()))
+        if USE_VOICE:
+            self.tasks.append(asyncio.create_task(self.tts()))
         self.tasks.append(asyncio.create_task(self.play_audio()))
         self.tasks.append(asyncio.create_task(self.process_text_input_queue()))
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await asyncio.gather(*self.tasks, return_exceptions=False)
 
     async def run(self):
         try:
             async with self.client.aio.live.connect(model=MODEL, config=self.config) as session:
                 await self.main_task_runner(session)
         except asyncio.CancelledError:
-            print(f"\n>>> [INFO] AI Core run loop gracefully cancelled.")
+            print(f"\n>>> [{ansi.CYAN}INFO{ansi.ENDC}] AI Core run loop gracefully cancelled.")
         except Exception as e:
-            print(f"\n>>> [ERROR] AI Core run loop encountered an error: {type(e).__name__}: {e}")
+            print(f"\n>>> [{ansi.RED}ERROR{ansi.ENDC}] AI Core run loop encountered an error: {type(e).__name__}: {e}")
         finally:
             if self.is_running:
                 self.stop()
@@ -350,7 +382,7 @@ class AI_Core(QObject):
             try:
                 future.result(timeout=5)
             except Exception as e:
-                print(f">>> [ERROR] Timeout or error during async shutdown: {e}")
+                print(f">>> [{ansi.RED}ERROR{ansi.ENDC}] Timeout or error during async shutdown: {e}")
 
         if self.audio_stream and self.audio_stream.is_active():
             self.audio_stream.stop_stream()
@@ -427,20 +459,8 @@ class MainWindow(QMainWindow):
         input_layout.addWidget(self.input_box)
         self.middle_layout.addWidget(input_container)
 
-        # --- Right Section (Video) ---
-        self.right_panel = QWidget()
-        self.right_panel.setObjectName("right_panel")
-        self.right_layout = QVBoxLayout(self.right_panel)
-        self.right_layout.setContentsMargins(15, 15, 15, 15)
-        self.video_label = QLabel()
-        self.video_label.setObjectName("video_label")
-        self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.right_layout.addWidget(self.video_label)
-
         self.main_layout.addWidget(self.left_panel, 2)
         self.main_layout.addWidget(self.middle_panel, 5)
-        self.main_layout.addWidget(self.right_panel, 3)
 
         self.is_first_jarvis_chunk = True
         self.setup_backend_thread()
@@ -474,11 +494,13 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def update_text(self, text):
         if self.is_first_jarvis_chunk:
+            print(f"{ansi.BLUE}JARVIS> {ansi.ENDC}", end="")
             self.is_first_jarvis_chunk = False
-            self.text_display.append(f"<p style='color:#A0A0A0; font-weight:bold;'>J.A.R.V.I.S>  </p>")
+            self.text_display.append(f"<span style='color:#545FFF; font-weight:bold; display:inline'>J.A.R.V.I.S></span><span style='color:#A0A0A0; font-weight:bold; display:inline'> </span>")
         cursor = self.text_display.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
+        print(text, end="")
         self.text_display.verticalScrollBar().setValue(self.text_display.verticalScrollBar().maximum())
 
     @Slot(list)
@@ -523,6 +545,7 @@ class MainWindow(QMainWindow):
         if not self.is_first_jarvis_chunk:
             self.text_display.append("")
         self.is_first_jarvis_chunk = True
+        print()
 
     @Slot(QImage)
     def update_frame(self, image):
@@ -533,7 +556,7 @@ class MainWindow(QMainWindow):
             self.video_label.setPixmap(scaled_pixmap)
 
     def closeEvent(self, event):
-        print(">>> [INFO] Closing application...")
+        print(f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Closing application...")
         self.ai_core.stop()
         event.accept()
 
@@ -542,13 +565,14 @@ class MainWindow(QMainWindow):
 # MAIN EXECUTION
 # ==============================================================================
 if __name__ == "__main__":
+    print(f"{ansi.BOLD}===> Booting Jarvis...{ansi.ENDC}")
     try:
         app = QApplication(sys.argv)
         window = MainWindow()
         window.show()
         sys.exit(app.exec())
     except KeyboardInterrupt:
-        print(">>> [INFO] Application interrupted by user.")
+        print(f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Application interrupted by user.")
     finally:
         pya.terminate()
-        print(">>> [INFO] Application terminated.")
+        print(f">>> [{ansi.CYAN}INFO{ansi.ENDC}] Application terminated.")
