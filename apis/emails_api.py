@@ -34,21 +34,37 @@ delete_emails_dec = {
     }
 }
 
+retrieve_email_dec = {
+    "name": "retrieve_email",
+    "description": "Retrieves information from the user's email using a list of stored email uids",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {"email_idx": {"type": "INTEGER", "description": "The index of the email to retrieve (starting at 1). Example: 1 for the first email, 2 for the second."}},
+        "required": ["email_idx"]
+    }
+}
+
 def count_emails():
     try:
         count = email.count_new_mail()
         return {"status": "success", "message": f"Emails counted", "emails": str(count)}
     except Exception as e:
-        print(str(e))
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
 def print_emails(limit=5):
     try:
-        email.get_new_mail(limit)
+        email.print_new_mail(limit)
         return {"status": "success", "message": f"Emails printed to console"}
     except Exception as e:
-        print(str(e))
         return {"status": "error", "message": f"An error occurred: {str(e)}"}
 
 def delete_mail(subject, sender):
     return email.delete_mail(subject, sender)
+
+def retrieve_email(email_idx: int) -> dict:
+    try:
+        mail_uid = email.recent_mail_ids[email_idx]
+        info = email.retrieve_mail(mail_uid)
+        return {"status": "success", "message": f"Email info retrieved.", "email": info}
+    except Exception as e:
+        return {"status": "error", "message": f"An error occurred: {str(e)}"}
