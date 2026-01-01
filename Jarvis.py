@@ -13,6 +13,7 @@ import apis.browser_api as br
 import apis.spotify_api as spt
 import apis.emails_api as e
 import apis.atv_api as atv
+import apis.locks_api as lock
 from apis.ansicolors import ANSIColors as ansi
 
 
@@ -25,7 +26,7 @@ ELEVENLABS_API = os.getenv("ELEVENLABS_API_KEY")
 MODEL = "gemini-2.5-flash"
 VOICE_ID = 'iF0kaX7XTQPFLTjMlJL4'
 USE_VOICE = False
-MAX_OUTPUT_TOKENS = 100
+MAX_OUTPUT_TOKENS = 500
 SYSTEM_INSTRUCTIONS="""Your name is Jarvis, which stands for Just A Rather Very Intelligent System. 
             You are an Ai designed to help me with day to day task. Also keep replies short when plausible.
                 You have access to tools for searching, code execution, and file system actions.
@@ -41,7 +42,7 @@ tools = types.Tool(function_declarations=[jpi.welcome_home_dec, jpi.create_folde
                                           jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
                                           br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
                                           dbapi.get_user_preferences_dec, e.count_emails_dec, e.print_emails_dec, e.delete_emails_dec, e.retrieve_email_dec, atv.atv_on_off_dec,
-                                          atv.launch_atv_app_dec, atv.apple_remote_command_dec])
+                                          atv.launch_atv_app_dec, atv.apple_remote_command_dec, lock.lock_unlock_door_dec, lock.get_lock_info_dec])
 
 # Check if the key was loaded successfully
 if not GEMINI_API:
@@ -51,8 +52,7 @@ print(f"===> {ansi.BOLD}{ansi.CYAN}BOOTING JARVIS...{ansi.ENDC}")
 
 history = [
     types.Content(
-        role="user", parts=[types.Part(text="Occasionally call me Mr. Schroeder or sir, upon your preference. Only welcome me home if I tell you I've returned. "
-                                                      "Reply to this with a greeting of your choice.")]
+        role="user", parts=[types.Part(text="Occasionally call me Mr. Schroeder or sir, upon your preference. Only welcome me home if I tell you I've returned.")]
     )
 ]
 
@@ -140,14 +140,23 @@ def send_message(user_input: str) -> str:
         elif fc.name == "send_remote_command":
             command = args.get("command")
             result = atv.send_remote_command(command)
+        elif fc.name == "lock_unlock_door":
+            lock_state = args.get("lock_state")
+            location = args.get("location")
+            lock_name = args.get("lock_name")
+            result = lock.lock_unlock_door(lock_state, location, lock_name)
+        elif fc.name == "get_lock_info":
+            location = args.get("location")
+            lock_name = args.get("lock_name")
+            result = lock.get_lock_info(location, lock_name)
 
         fc_response = types.Part.from_function_response(
             name=fc.name,
             response={"result": result}
         )
+
         history.append(response.candidates[0].content)
         history.append(types.Content(role="user", parts=[fc_response]))
-
         final_response = client.models.generate_content(
             model=MODEL,
             contents=history,
@@ -162,6 +171,8 @@ def main():
     elevenlabs = ElevenLabs(
         api_key=ELEVENLABS_API
     )
+    initial_response = send_message("Reply to this with a greeting of your choice.")
+    print(f"{ansi.BOLD}{ansi.BLUE}Jarvis:{ansi.ENDC} {initial_response}")
     while True:
         try:
             user_input = input(f"{ansi.BOLD}{ansi.GREEN}You:{ansi.ENDC} ")
@@ -169,7 +180,6 @@ def main():
             if user_input.lower() == "exit":
                 break
 
-            # Send the user's input to the model and enable streaming.
             history.append(types.Content(role="user", parts=[types.Part(text=user_input)]))
             response = send_message(user_input)
 
