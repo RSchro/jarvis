@@ -12,6 +12,7 @@ import db.dp_api as dbapi
 import apis.browser_api as br
 import apis.spotify_api as spt
 import apis.emails_api as e
+import apis.atv_api as atv
 from apis.ansicolors import ANSIColors as ansi
 
 
@@ -23,6 +24,7 @@ GEMINI_API = os.getenv("GEMINI_API_KEY")
 ELEVENLABS_API = os.getenv("ELEVENLABS_API_KEY")
 MODEL = "gemini-2.5-flash"
 VOICE_ID = 'iF0kaX7XTQPFLTjMlJL4'
+USE_VOICE = False
 MAX_OUTPUT_TOKENS = 100
 SYSTEM_INSTRUCTIONS="""Your name is Jarvis, which stands for Just A Rather Very Intelligent System. 
             You are an Ai designed to help me with day to day task. Also keep replies short when plausible.
@@ -36,9 +38,10 @@ SYSTEM_INSTRUCTIONS="""Your name is Jarvis, which stands for Just A Rather Very 
 
 client = genai.Client(api_key=GEMINI_API)  # Creates a client instance for the Gemini API
 tools = types.Tool(function_declarations=[jpi.welcome_home_dec, jpi.create_folder_dec, jpi.create_file_dec, jpi.edit_file_dec, jpi.open_application_dec, jpi.close_app_dec,
-                                            jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
-                                            br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
-                                            dbapi.get_user_preferences_dec, e.count_emails_dec, e.print_emails_dec, e.delete_emails_dec, e.retrieve_email_dec])
+                                          jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
+                                          br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
+                                          dbapi.get_user_preferences_dec, e.count_emails_dec, e.print_emails_dec, e.delete_emails_dec, e.retrieve_email_dec, atv.atv_on_off_dec,
+                                          atv.launch_atv_app_dec, atv.apple_remote_command_dec])
 
 # Check if the key was loaded successfully
 if not GEMINI_API:
@@ -54,7 +57,6 @@ history = [
 ]
 
 config = types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTIONS, tools=[tools], max_output_tokens=MAX_OUTPUT_TOKENS)
-
 
 # Generates client response and updates chat history -> checks for function call then handles differently
 def send_message(user_input: str) -> str:
@@ -130,6 +132,14 @@ def send_message(user_input: str) -> str:
         elif fc.name == "retrieve_email":
             email_idx = args.get("email_idx")
             result = e.retrieve_email(email_idx)
+        elif fc.name == "atv_on_off":
+            result = atv.atv_on_off()
+        elif fc.name == "launch_atv_app":
+            app_name = args.get("app_name")
+            result = atv.launch_atv_app(app_name)
+        elif fc.name == "send_remote_command":
+            command = args.get("command")
+            result = atv.send_remote_command(command)
 
         fc_response = types.Part.from_function_response(
             name=fc.name,
@@ -164,14 +174,15 @@ def main():
             response = send_message(user_input)
 
             print(f"{ansi.BOLD}{ansi.BLUE}Jarvis:{ansi.ENDC} {response}")
-            audio = elevenlabs.text_to_speech.convert(
+            if USE_VOICE:
+                audio = elevenlabs.text_to_speech.convert(
 
-                text=response,
-                voice_id=VOICE_ID,
-                model_id="eleven_flash_v2_5",
-                output_format="mp3_44100_128"
-            )
-            play(audio)
+                    text=response,
+                    voice_id=VOICE_ID,
+                    model_id="eleven_flash_v2_5",
+                    output_format="mp3_44100_128"
+                )
+                play(audio)
 
         except Exception as e:
             # Catch any exceptions and print an error message.
