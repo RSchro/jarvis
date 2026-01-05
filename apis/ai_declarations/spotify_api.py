@@ -1,6 +1,6 @@
 import time
-import apis.spotify as spot
-import apis.browser as br
+import apis.api_definitions.spotify as spot
+import apis.api_definitions.browser as br
 import jarvisAPI as jpi
 
 spotify_tools = ["play_pause_dec", "skip_dec", "previous_track_dec", "spotify_play_song_dec"]

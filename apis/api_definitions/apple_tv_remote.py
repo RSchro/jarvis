@@ -6,17 +6,17 @@ import os
 load_dotenv()
 
 remote_id = str(os.getenv("ATV_REMOTE_ID"))     # personal home remote id
-base_remote_command = ['atvremote', '--id', remote_id]  # commonly used command for controlling Apple TV
+BASE_COMMAND = ['atvremote', '--id', remote_id]  # commonly used command for controlling Apple TV
 app_dict = {} # dictionary to start apps installed on device
 
 # Assigns virtual environment directory to use 'atvremote' command
-venv_name = '../.venv/Scripts'
+venv_name = '../../.venv/Scripts'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VENV_PATH = os.path.join(BASE_DIR, venv_name)
 
 # returns list of applications installed on device
 def get_app_list() -> Tuple[str, str]:
-    command = base_remote_command + ['app_list']
+    command = BASE_COMMAND + ['app_list']
     process = subprocess.Popen(command, cwd=VENV_PATH, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout, stderr = process.communicate()
 
@@ -33,7 +33,7 @@ def add_app_dict():
 
 # Checks if on/off then sends respective command
 def turn_on_off():
-    command = base_remote_command + ['power_state']
+    command = BASE_COMMAND + ['power_state']
     process = subprocess.Popen(command, cwd=VENV_PATH, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout, stderr = process.communicate()
 
@@ -41,7 +41,7 @@ def turn_on_off():
     if 'on' in stdout.lower():
         power = "turn_off"
 
-    command = base_remote_command + [power]
+    command = BASE_COMMAND + [power]
     subprocess.Popen(command, cwd=VENV_PATH)
 
 # finds application url from app_dict and launches
@@ -53,10 +53,10 @@ def launch_app(app_name):
         if app.lower() == app_name.lower():
             app_url = app_dict[app]
 
-    command = base_remote_command + [f'launch_app={app_url}']
+    command = BASE_COMMAND + [f'launch_app={app_url}']
     subprocess.Popen(command, cwd=VENV_PATH)
 
 # used for generic commands i.e up, down, select, etc.
 def remote_command(command: str):
-    full_command = base_remote_command + [command]
+    full_command = BASE_COMMAND + [command]
     subprocess.Popen(full_command, cwd=VENV_PATH)

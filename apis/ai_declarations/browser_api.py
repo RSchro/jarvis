@@ -1,6 +1,4 @@
-import time
-
-import apis.browser as br
+import apis.api_definitions.browser as br
 
 open_page_dec= {
     "name": "open_page_api",

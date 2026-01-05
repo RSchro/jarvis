@@ -8,7 +8,7 @@ import fnmatch
 from datetime import datetime as dt
 from dotenv import load_dotenv
 import db.database as db
-import apis.spotify_api as spot
+import apis.ai_declarations.spotify_api as spot
 
 load_dotenv()
 

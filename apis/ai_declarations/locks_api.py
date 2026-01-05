@@ -1,4 +1,4 @@
-import apis.locks as lock
+import apis.api_definitions.locks as lock
 
 lock_unlock_door_dec = {
     "name": "lock_unlock_door",

@@ -1,4 +1,4 @@
-import apis.emails as email
+import apis.api_definitions.emails as email
 
 count_emails_dec = {
     "name": "count_emails",

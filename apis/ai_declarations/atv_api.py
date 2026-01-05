@@ -1,4 +1,4 @@
-import apis.apple_tv_remote as atv
+import apis.api_definitions.apple_tv_remote as atv
 
 # -- Declares the functions for Jarvis to recognize --
 atv_on_off_dec = {

@@ -1,6 +1,5 @@
 from google import genai  # Imports the main Gemini AI library
 from google.genai import types
-from google.genai.types import ModelContent, Part, UserContent
 import os  # Imports the 'os' module for system interactions
 from dotenv import load_dotenv  # Imports a function to load environment variables from a .env file
 from elevenlabs.client import ElevenLabs
@@ -9,12 +8,13 @@ from elevenlabs.play import play
 # -- CUSTOM APIs --
 import jarvisAPI as jpi
 import db.dp_api as dbapi
-import apis.browser_api as br
-import apis.spotify_api as spt
-import apis.emails_api as e
-import apis.atv_api as atv
-import apis.locks_api as lock
-from apis.ansicolors import ANSIColors as ansi
+import apis.ai_declarations.browser_api as br
+import apis.ai_declarations.spotify_api as spt
+import apis.ai_declarations.emails_api as e
+import apis.ai_declarations.atv_api as atv
+import apis.ai_declarations.locks_api as lock
+import apis.ai_declarations.climate_api as clmt
+from apis.api_definitions.ansicolors import ANSIColors as ansi
 
 
 # Load environment variables from .env file
@@ -42,7 +42,8 @@ tools = types.Tool(function_declarations=[jpi.welcome_home_dec, jpi.create_folde
                                           jpi.get_weather_dec, jpi.get_local_time_dec, dbapi.insert_app_path_dec, dbapi.insert_web_search_url_dec, br.open_page_dec, br.search_page_dec,
                                           br.scroll_dec, spt.play_pause_dec, spt.skip_dec, spt.previous_track_dec, spt.spotify_play_song_dec, spt.spotify_play_artist_dec,
                                           dbapi.get_user_preferences_dec, e.count_emails_dec, e.print_emails_dec, e.delete_emails_dec, e.retrieve_email_dec, atv.atv_on_off_dec,
-                                          atv.launch_atv_app_dec, atv.apple_remote_command_dec, lock.lock_unlock_door_dec, lock.get_lock_info_dec])
+                                          atv.launch_atv_app_dec, atv.apple_remote_command_dec, lock.lock_unlock_door_dec, lock.get_lock_info_dec, clmt.climate_power_dec, clmt.set_temp_dec,
+                                          clmt.set_climate_mode_dec, clmt.swing_mode_dec, clmt.fan_speed_dec])
 
 # Check if the key was loaded successfully
 if not GEMINI_API:
@@ -149,6 +150,21 @@ def send_message(user_input: str) -> str:
             location = args.get("location")
             lock_name = args.get("lock_name")
             result = lock.get_lock_info(location, lock_name)
+        elif fc.name == "set_climate_power":
+            power_mode = args.get("power_mode")
+            result = clmt.set_climate_power(power_mode)
+        elif fc.name == "set_temp":
+            temp = args.get("temp")
+            result = clmt.set_temp(temp)
+        elif fc.name == "set_climate_mode":
+            op_mode = args.get("op_mode")
+            result = clmt.set_climate_mode(op_mode)
+        elif fc.name == "set_swing_mode":
+            swing_mode = args.get("swing_mode")
+            result = clmt.set_swing_mode(swing_mode)
+        elif fc.name == "set_fan_speed":
+            fan_speed = args.get("fan_speed")
+            result = clmt.set_fan_speed(fan_speed)
 
         fc_response = types.Part.from_function_response(
             name=fc.name,

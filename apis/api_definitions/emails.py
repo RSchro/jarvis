@@ -1,6 +1,4 @@
-import imap_tools
-
-from apis.ansicolors import ANSIColors as ansi
+from apis.api_definitions.ansicolors import ANSIColors as ansi
 from imap_tools import MailBox, OR, AND
 from dotenv import load_dotenv
 import os

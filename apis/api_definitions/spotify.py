@@ -1,6 +1,6 @@
 import time
 import pyautogui as pg
-import apis.browser as br
+
 
 # Play
 def play_pause():

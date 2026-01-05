@@ -1,7 +1,6 @@
 from typing import Any
 from seam import Seam
 from dotenv import load_dotenv
-import requests
 
 load_dotenv()
 
